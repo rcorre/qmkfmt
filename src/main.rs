@@ -1,3 +1,7 @@
+use prettytable::{
+    format::{FormatBuilder, TableFormat},
+    Table,
+};
 use std::path::PathBuf;
 use streaming_iterator::StreamingIterator;
 
@@ -31,8 +35,8 @@ fn main() {
 
     let mut it = qc.matches(&query, tree.root_node(), text.as_bytes());
     while let Some(m) = it.next() {
-        let name = m.captures[0]
-            .node
+        let node = m.captures[0].node;
+        let name = node
             .utf8_text(text.as_bytes())
             .expect("Failed to get text from node");
         if !name.starts_with("LAYOUT") {
@@ -40,13 +44,33 @@ fn main() {
         }
         eprintln!("{name}");
 
+        let mut table = Table::new();
+        table.set_format(*prettytable::format::consts::FORMAT_CLEAN);
         let node = m.captures[1].node;
         let mut qc = node.walk();
-        for node in m.captures[1].node.named_children(&mut qc) {
-            let text = node
-                .utf8_text(text.as_bytes())
-                .expect("Failed to get text from node");
-            eprintln!("{text:?}")
+
+        let keys: Vec<_> = m.captures[1]
+            .node
+            .named_children(&mut qc)
+            .map(|node| node_to_text(&text, &node) + ",")
+            .collect();
+
+        for row in keys.chunks(12) {
+            let fill = 12 - row.len();
+            table.add_row(
+                std::iter::repeat_n("", fill / 2)
+                    .chain(row.iter().map(|s| s.as_str()))
+                    .chain(std::iter::repeat_n("", fill / 2))
+                    .into(),
+            );
         }
+
+        println!("{}", table)
     }
+}
+
+fn node_to_text(text: &str, node: &tree_sitter::Node) -> String {
+    node.utf8_text(text.as_bytes())
+        .expect("Failed to get text from node")
+        .to_string()
 }
