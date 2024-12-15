@@ -1,21 +1,11 @@
 use core::str;
 use prettytable::Table;
-use std::path::PathBuf;
+use std::io::Read;
 use streaming_iterator::StreamingIterator;
 
-use clap::Parser;
-
-#[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
-struct Args {
-    /// Path to keymap.c to format.
-    path: PathBuf,
-}
-
 fn main() {
-    let args = Args::parse();
-
-    let text = std::fs::read_to_string(args.path).expect("Failed to read file");
+    let mut text = String::new();
+    std::io::stdin().read_to_string(&mut text).unwrap();
 
     let language = tree_sitter_c::LANGUAGE.into();
     let mut parser = tree_sitter::Parser::new();
@@ -35,8 +25,7 @@ fn main() {
     assert_eq!(args_idx, 1);
     let call_idx = query.capture_index_for_name("call").unwrap();
     assert_eq!(call_idx, 2);
-    
-    
+
     let mut qc = tree_sitter::QueryCursor::new();
 
     let column_count = 12;
@@ -45,8 +34,11 @@ fn main() {
     let mut it = qc.matches(&query, tree.root_node(), text.as_bytes());
     while let Some(m) = it.next() {
         let indent = ""; // TODO: determine from initializer_pair
-        // Ensure this is a layout call, and if so, extract the name (e.g. LAYOUT_split_3x6_3)
-        let name = m.nodes_for_capture_index(id_idx).next().unwrap()
+                         // Ensure this is a layout call, and if so, extract the name (e.g. LAYOUT_split_3x6_3)
+        let name = m
+            .nodes_for_capture_index(id_idx)
+            .next()
+            .unwrap()
             .utf8_text(text.as_bytes())
             .expect("Failed to get text from node");
         if !name.starts_with("LAYOUT") {
@@ -66,7 +58,10 @@ fn main() {
         let node = m.captures[1].node;
         let mut qc = node.walk();
 
-        let keys: Vec<_> = m.nodes_for_capture_index(args_idx).next().unwrap()
+        let keys: Vec<_> = m
+            .nodes_for_capture_index(args_idx)
+            .next()
+            .unwrap()
             .named_children(&mut qc)
             .map(|node| node_to_text(&text, &node) + ",")
             .collect();
@@ -86,11 +81,24 @@ fn main() {
 
     let rest = &text.as_bytes()[last_byte..];
     let rest = str::from_utf8(rest).expect("Text is not utf-8");
-    println!("{rest}");
+    print!("{rest}");
 }
 
 fn node_to_text(text: &str, node: &tree_sitter::Node) -> String {
     node.utf8_text(text.as_bytes())
         .expect("Failed to get text from node")
         .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
+    use std::process::Command;
+
+    #[test]
+    fn test_fmt() {
+        let mut cmd = Command::new(get_cargo_bin(env!("CARGO_PKG_NAME")));
+        let keymap = std::fs::read_to_string("testdata/keymap.c").unwrap();
+        assert_cmd_snapshot!(cmd.pass_stdin(keymap));
+    }
 }
