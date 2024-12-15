@@ -20,25 +20,20 @@ fn main() {
     )
     .unwrap();
     let id_idx = query.capture_index_for_name("id").unwrap();
-    assert_eq!(id_idx, 0);
     let args_idx = query.capture_index_for_name("args").unwrap();
-    assert_eq!(args_idx, 1);
     let call_idx = query.capture_index_for_name("call").unwrap();
-    assert_eq!(call_idx, 2);
 
-    let mut qc = tree_sitter::QueryCursor::new();
-
+    let lines: Vec<_> = text.lines().collect();
     let column_count = 12;
-
     let mut last_byte = 0;
+    let mut qc = tree_sitter::QueryCursor::new();
     let mut it = qc.matches(&query, tree.root_node(), text.as_bytes());
     while let Some(m) = it.next() {
-        let indent = ""; // TODO: determine from initializer_pair
-                         // Ensure this is a layout call, and if so, extract the name (e.g. LAYOUT_split_3x6_3)
-        let name = m
-            .nodes_for_capture_index(id_idx)
-            .next()
-            .unwrap()
+        let name = m.nodes_for_capture_index(id_idx).next().unwrap();
+        let (indent, _) = lines[name.start_position().row]
+            .split_once(|c: char| !c.is_whitespace())
+            .unwrap();
+        let name = name
             .utf8_text(text.as_bytes())
             .expect("Failed to get text from node");
         if !name.starts_with("LAYOUT") {
@@ -76,7 +71,14 @@ fn main() {
             );
         }
 
-        print!("{name}(\n{table}{indent})")
+        // Indent each line of the table
+        let table = table
+            .to_string()
+            .lines()
+            .map(|line| format!("{indent}{indent}{line}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        print!("{name}(\n{table}\n{indent})");
     }
 
     let rest = &text.as_bytes()[last_byte..];
