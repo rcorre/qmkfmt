@@ -58,10 +58,28 @@ fn main() {
             .next()
             .unwrap()
             .named_children(&mut qc)
-            .map(|node| node_to_text(&text, &node) + ",")
             .collect();
 
-        for row in keys.chunks(column_count) {
+        // Group keys by row
+        let min_row = keys
+            .iter()
+            .map(|node| node.start_position().row)
+            .min()
+            .unwrap();
+        let max_row = keys
+            .iter()
+            .map(|node| node.start_position().row)
+            .max()
+            .unwrap();
+        let row_count = max_row - min_row + 1;
+        let mut rows = vec![vec![]; row_count];
+        for (i, key) in keys.iter().enumerate() {
+            let row = key.start_position().row - min_row;
+            rows[row]
+                .push(node_to_text(&text, &key) + if i == (keys.len() - 1) { "" } else { "," });
+        }
+
+        for row in rows {
             let fill = column_count - row.len();
             table.add_row(
                 std::iter::repeat_n("", fill / 2)
@@ -75,6 +93,7 @@ fn main() {
         let table = table
             .to_string()
             .lines()
+            .map(|line| line.trim_end())
             .map(|line| format!("{indent}{indent}{line}"))
             .collect::<Vec<_>>()
             .join("\n");
