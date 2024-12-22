@@ -24,7 +24,6 @@ fn main() {
     let call_idx = query.capture_index_for_name("call").unwrap();
 
     let lines: Vec<_> = text.lines().collect();
-    let column_count = 12;
     let mut last_byte = 0;
     let mut qc = tree_sitter::QueryCursor::new();
     let mut it = qc.matches(&query, tree.root_node(), text.as_bytes());
@@ -78,6 +77,12 @@ fn main() {
             rows[row]
                 .push(node_to_text(&text, &key) + if i == (keys.len() - 1) { "" } else { "," });
         }
+
+        let column_count = rows
+            .iter()
+            .map(|row| row.len())
+            .max()
+            .expect("Row has 0 columns");
 
         for row in rows {
             let fill = column_count - row.len();
