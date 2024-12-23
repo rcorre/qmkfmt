@@ -1,7 +1,56 @@
 use core::str;
 use prettytable::Table;
-use std::io::Read;
+use std::{
+    io::{Read, Write},
+    process::Stdio,
+};
 use streaming_iterator::StreamingIterator;
+
+fn clang_format(text: &str) -> String {
+    let mut cmd = std::process::Command::new("clang-format");
+    cmd.stdin(Stdio::piped()).stdout(Stdio::piped());
+    let mut cmd = match cmd.spawn() {
+        Ok(cmd) => cmd,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            // clang-format not installed
+            return text.to_string();
+        }
+        Err(err) => panic!("Failed to exec clang-format: {err:?}"),
+    };
+    cmd.stdin
+        .take()
+        .unwrap()
+        .write_all(text.as_bytes())
+        .expect("Failed to write to clang-format");
+    let output = cmd
+        .wait_with_output()
+        .expect("Failed to wait for clang-format");
+    if !output.status.success() {
+        panic!("clang-format exited with code: {:?}", output.status.code());
+    }
+    String::from_utf8(output.stdout).expect("clang-format output is not utf-8")
+}
+
+fn find_keymaps<'a>(
+    language: &'a tree_sitter::Language,
+    tree: &'a tree_sitter::Tree,
+    text: &str,
+) -> Option<tree_sitter::Node<'a>> {
+    let query = tree_sitter::Query::new(
+        &language,
+        "(declaration (init_declarator (array_declarator (array_declarator (array_declarator (identifier) @id))))) @decl")
+    .unwrap();
+    let mut qc = tree_sitter::QueryCursor::new();
+    let mut it = qc.matches(&query, tree.root_node(), text.as_bytes());
+
+    while let Some(x) = it.next() {
+        let node = x.captures[1].node;
+        if node_to_text(&text, &node) == "keymaps" {
+            return Some(x.captures[0].node);
+        }
+    }
+    None
+}
 
 fn main() {
     let mut text = String::new();
@@ -14,6 +63,14 @@ fn main() {
         .expect("Error loading C parser");
 
     let tree = parser.parse(&text, None).unwrap();
+
+    // Print everything before keymaps, possibly formatting with clang-format
+    let keymaps = find_keymaps(&language, &tree, &text).expect("No keymaps found");
+    let prefix = &text.as_bytes()[0..keymaps.start_byte()];
+    let prefix = str::from_utf8(prefix).expect("Text is not utf-8");
+    print!("{prefix}");
+    let mut last_byte = keymaps.start_byte();
+
     let query = tree_sitter::Query::new(
         &language,
         "(call_expression (identifier) @id (argument_list) @args) @call",
@@ -24,7 +81,6 @@ fn main() {
     let call_idx = query.capture_index_for_name("call").unwrap();
 
     let lines: Vec<_> = text.lines().collect();
-    let mut last_byte = 0;
     let mut qc = tree_sitter::QueryCursor::new();
     let mut it = qc.matches(&query, tree.root_node(), text.as_bytes());
     while let Some(m) = it.next() {
@@ -32,32 +88,23 @@ fn main() {
         let (indent, _) = lines[name.start_position().row]
             .split_once(|c: char| !c.is_whitespace())
             .unwrap();
-        let name = name
-            .utf8_text(text.as_bytes())
-            .expect("Failed to get text from node");
-        if !name.starts_with("LAYOUT") {
+        let name = node_to_text(&text, &name);
+        if !name.starts_with("LAYOUT_") {
             continue;
         }
 
         // Print everything before the call expression
-        let call_node = m.nodes_for_capture_index(call_idx).next().unwrap();
-        let prefix = &text.as_bytes()[last_byte..call_node.start_byte()];
+        let args_node = m.nodes_for_capture_index(args_idx).next().unwrap();
+        let prefix = &text.as_bytes()[last_byte..args_node.start_byte()];
         let prefix = str::from_utf8(prefix).expect("Text is not utf-8");
-        last_byte = call_node.end_byte();
         print!("{prefix}");
 
         // Print the formatted key list inside parens
         let mut table = Table::new();
         table.set_format(*prettytable::format::consts::FORMAT_CLEAN);
-        let node = m.captures[1].node;
-        let mut qc = node.walk();
+        let mut qc = args_node.walk();
 
-        let keys: Vec<_> = m
-            .nodes_for_capture_index(args_idx)
-            .next()
-            .unwrap()
-            .named_children(&mut qc)
-            .collect();
+        let keys: Vec<_> = args_node.named_children(&mut qc).collect();
 
         // Group keys by row
         let min_row = keys
@@ -102,11 +149,20 @@ fn main() {
             .map(|line| format!("{indent}{indent}{line}"))
             .collect::<Vec<_>>()
             .join("\n");
-        print!("{name}(\n{table}\n{indent})");
+        print!("(\n{table}\n{indent})");
+
+        let call_node = m.nodes_for_capture_index(call_idx).next().unwrap();
+        last_byte = call_node.end_byte();
     }
 
-    let rest = &text.as_bytes()[last_byte..];
+    let keymaps_end = keymaps.end_byte();
+    let rest = &text.as_bytes()[last_byte..keymaps_end];
     let rest = str::from_utf8(rest).expect("Text is not utf-8");
+    print!("{rest}");
+
+    let rest = &text.as_bytes()[keymaps_end..];
+    let rest = str::from_utf8(rest).expect("Text is not utf-8");
+    let rest = clang_format(rest);
     print!("{rest}");
 }
 
@@ -114,17 +170,4 @@ fn node_to_text(text: &str, node: &tree_sitter::Node) -> String {
     node.utf8_text(text.as_bytes())
         .expect("Failed to get text from node")
         .to_string()
-}
-
-#[cfg(test)]
-mod tests {
-    use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
-    use std::process::Command;
-
-    #[test]
-    fn test_fmt() {
-        let mut cmd = Command::new(get_cargo_bin(env!("CARGO_PKG_NAME")));
-        let keymap = std::fs::read_to_string("testdata/keymap.c").unwrap();
-        assert_cmd_snapshot!(cmd.pass_stdin(keymap));
-    }
 }
