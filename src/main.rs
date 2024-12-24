@@ -1,10 +1,21 @@
 use core::str;
 use prettytable::Table;
 use std::{
+    fs::{write, File},
     io::{Read, Write},
+    path::PathBuf,
     process::Stdio,
 };
 use streaming_iterator::StreamingIterator;
+
+use clap::Parser;
+
+#[derive(Parser)]
+#[command(version, about, long_about = None)]
+struct Cli {
+    /// Path to keymap.c to format. If omitted, expects input on stdin.
+    path: Option<PathBuf>,
+}
 
 fn clang_format(text: &str) -> String {
     let mut cmd = std::process::Command::new("clang-format");
@@ -53,9 +64,24 @@ fn find_keymaps<'a>(
 }
 
 fn main() {
-    let mut text = String::new();
-    std::io::stdin().read_to_string(&mut text).unwrap();
+    let cli = Cli::parse();
+    match cli.path {
+        Some(path) => {
+            let text = std::fs::read_to_string(&path).expect("Failed to read");
+            let mut output = File::create(path).expect("Failed to open for writing");
+            format(&text, &mut output);
+        }
+        None => {
+            let mut text = String::new();
+            std::io::stdin()
+                .read_to_string(&mut text)
+                .expect("Failed to read stdin");
+            format(&text, &mut std::io::stdout());
+        }
+    };
+}
 
+fn format(text: &str, output: &mut impl Write) {
     let language = tree_sitter_c::LANGUAGE.into();
     let mut parser = tree_sitter::Parser::new();
     parser
@@ -68,7 +94,7 @@ fn main() {
     let keymaps = find_keymaps(&language, &tree, &text).expect("No keymaps found");
     let prefix = &text.as_bytes()[0..keymaps.start_byte()];
     let prefix = str::from_utf8(prefix).expect("Text is not utf-8");
-    print!("{prefix}");
+    write!(output, "{prefix}").expect("Failed to write prefix");
     let mut last_byte = keymaps.start_byte();
 
     let query = tree_sitter::Query::new(
@@ -97,7 +123,7 @@ fn main() {
         let args_node = m.nodes_for_capture_index(args_idx).next().unwrap();
         let prefix = &text.as_bytes()[last_byte..args_node.start_byte()];
         let prefix = str::from_utf8(prefix).expect("Text is not utf-8");
-        print!("{prefix}");
+        write!(output, "{prefix}").expect("Failed to write layout prefix");
 
         // Print the formatted key list inside parens
         let mut table = Table::new();
@@ -149,7 +175,7 @@ fn main() {
             .map(|line| format!("{indent}{indent}{line}"))
             .collect::<Vec<_>>()
             .join("\n");
-        print!("(\n{table}\n{indent})");
+        write!(output, "(\n{table}\n{indent})").unwrap();
 
         let call_node = m.nodes_for_capture_index(call_idx).next().unwrap();
         last_byte = call_node.end_byte();
@@ -158,12 +184,12 @@ fn main() {
     let keymaps_end = keymaps.end_byte();
     let rest = &text.as_bytes()[last_byte..keymaps_end];
     let rest = str::from_utf8(rest).expect("Text is not utf-8");
-    print!("{rest}");
+    write!(output, "{rest}").unwrap();
 
     let rest = &text.as_bytes()[keymaps_end..];
     let rest = str::from_utf8(rest).expect("Text is not utf-8");
     let rest = clang_format(rest);
-    print!("{rest}");
+    write!(output, "{rest}").unwrap();
 }
 
 fn node_to_text(text: &str, node: &tree_sitter::Node) -> String {
