@@ -13,4 +13,6 @@ tree-sitter-c = "0.23.2"
 [dev-dependencies]
 insta = { version = "1.39" }
 insta-cmd = "0.6"
+pretty_assertions = "1.4.1"
+tempfile = "3.14.0"
 
