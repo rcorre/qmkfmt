@@ -1,4 +1,4 @@
-use insta_cmd::get_cargo_bin;
+use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 use pretty_assertions::assert_eq;
 use std::{
     io::Write,
@@ -47,6 +47,11 @@ fn fmt_path(cmd: &mut Command, keyboard: &str) -> String {
 
 fn expected(keyboard: &str) -> String {
     std::fs::read_to_string(after_path(keyboard)).unwrap()
+}
+
+#[test]
+fn test_help() {
+    assert_cmd_snapshot!(bin().arg("--help"));
 }
 
 #[test]

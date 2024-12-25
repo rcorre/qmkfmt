@@ -1,0 +1,20 @@
+---
+source: tests/integration_test.rs
+info:
+  program: qmkfmt
+  args:
+    - "--help"
+---
+success: true
+exit_code: 0
+----- stdout -----
+Usage: qmkfmt [PATH]
+
+Arguments:
+  [PATH]  Path to keymap.c to format. If omitted, reads stdin and writes to stdout
+
+Options:
+  -h, --help     Print help
+  -V, --version  Print version
+
+----- stderr -----

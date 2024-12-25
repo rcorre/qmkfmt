@@ -1,7 +1,7 @@
 use core::str;
 use prettytable::Table;
 use std::{
-    fs::{write, File},
+    fs::File,
     io::{Read, Write},
     path::PathBuf,
     process::Stdio,
@@ -13,7 +13,7 @@ use clap::Parser;
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Cli {
-    /// Path to keymap.c to format. If omitted, expects input on stdin.
+    /// Path to keymap.c to format. If omitted, reads stdin and writes to stdout.
     path: Option<PathBuf>,
 }
 
