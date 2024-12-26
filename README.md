@@ -9,6 +9,12 @@ If `clang-format` is available on `$PATH`, `qmkfmt` will invoke it to format the
 
 `qmkfmt` infers the number of rows from the number of lines in each `LAYOUT`.
 
+# Installation
+
+Pre-compiled binaries are available on the [releases page](https://github.com/rcorre/qmkfmt/releases).
+To install the latest release from crates.io, run `cargo install qmkfmt`
+To install the latest from git, run `cargo install --git https://github.com/rcorre/qmkfmt`
+
 # Editor Setup
 
 ## Helix
