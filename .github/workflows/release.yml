@@ -53,12 +53,12 @@ jobs:
           mkdir artifacts/archives
 
           cd artifacts/ubuntu-latest
-          tar cJvf "../archives/${{BIN_NAME}}-$GITHUB_REF_NAME-linux.tar.xz" ${{BIN_NAME}}
+          tar cJvf "../archives/$BIN_NAME-$GITHUB_REF_NAME-linux.tar.xz" $BIN_NAME
 
           cd ../macos-latest
-          tar cJvf "../archives/${{BIN_NAME}}-$GITHUB_REF_NAME-macos.tar.xz" ${{BIN_NAME}}
+          tar cJvf "../archives/$BIN_NAME-$GITHUB_REF_NAME-macos.tar.xz" $BIN_NAME
 
           cd ../windows-latest
-          zip "../archives/${{BIN_NAME}}-$GITHUB_REF_NAME-windows.zip" ${{BIN_NAME}}.exe
+          zip "../archives/$BIN_NAME-$GITHUB_REF_NAME-windows.zip" $BIN_NAME.exe
 
           gh release create "$GITHUB_REF_NAME" --notes-from-tag ../archives/*
