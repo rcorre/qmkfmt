@@ -2,6 +2,12 @@
 name = "qmkfmt"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
+description = "Formatter for QMK keymaps"
+homepage = "https://github.com/rcorre/qmkfmt"
+repository = "https://github.com/rcorre/qmkfmt"
+keywords = ["qmk", "format"]
+categories = ["development-tools"]
 
 [dependencies]
 clap = { version = "4.5.23", features = ["derive"] }
