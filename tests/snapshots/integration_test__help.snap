@@ -14,7 +14,7 @@ Arguments:
   [PATH]  Path to keymap.c to format. If omitted, reads stdin and writes to stdout
 
 Options:
-      --split-spaces <SPLIT_SPACES>  Number of columns worth of spaces to insert between the left/right halves
+      --split-spaces <SPLIT_SPACES>  Number of spaces to insert between sides of the keyboard
   -h, --help                         Print help
   -V, --version                      Print version
 
