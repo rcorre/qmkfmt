@@ -14,8 +14,18 @@ Bug reports, feature requests, and contributions are welcome!
 # Installation
 
 Pre-compiled binaries are available on the [releases page](https://github.com/rcorre/qmkfmt/releases).
-To install the latest release from crates.io, run `cargo install qmkfmt`
-To install the latest from git, run `cargo install --git https://github.com/rcorre/qmkfmt`
+
+To install the latest release from crates.io:
+
+```sh
+cargo install qmkfmt
+```
+
+To install the latest from git:
+
+```sh
+cargo install --git https://github.com/rcorre/qmkfmt
+```
 
 # Editor Setup
 
