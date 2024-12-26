@@ -1,0 +1,64 @@
+name: Release
+on:
+  push:
+    tags: [ '[0-9]+.[0-9]+*' ]
+
+env:
+  BIN_NAME: qmkfmt
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+        include:
+          - os: windows-latest
+            extension: .exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Build release binary
+        run: cargo build --release --locked
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os }}
+          path: target/release/${{BIN_NAME}}${{ matrix.extension }}
+          if-no-files-found: error
+
+  publish:
+    needs: [build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir artifacts/archives
+
+          cd artifacts/ubuntu-latest
+          tar cJvf "../archives/${{BIN_NAME}}-$GITHUB_REF_NAME-linux.tar.xz" ${{BIN_NAME}}
+
+          cd ../macos-latest
+          tar cJvf "../archives/${{BIN_NAME}}-$GITHUB_REF_NAME-macos.tar.xz" ${{BIN_NAME}}
+
+          cd ../windows-latest
+          zip "../archives/${{BIN_NAME}}-$GITHUB_REF_NAME-windows.zip" ${{BIN_NAME}}.exe
+
+          gh release create "$GITHUB_REF_NAME" --notes-from-tag ../archives/*
