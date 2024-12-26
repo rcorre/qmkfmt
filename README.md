@@ -1,10 +1,13 @@
 # QMK Format
 
 `qmkfmt` is a tool to format the `keymaps` section of a `keymap.c` file in [qmk](https://qmk.fm/).
+It formats each `LAYOUT` entry under `keymaps` into a grid with aligned columns.
+If the `--split-spaces` argument is passed, it inserts the given nubmer of spaces in the center of each layout.
+If a row has less than the maximum number of columns (e.g. a thumb cluster), it is centered.
 
-# Clang Format
+If `clang-format` is available on `$PATH`, `qmkfmt` will invoke it to format the rest of the file.
 
-If `clang-format` is available on `$PATH`, `qmkfmt` will also invoke `clang-format` to format the rest of the file.
+`qmkfmt` infers the number of rows from the number of lines in each `LAYOUT`.
 
 # Editor Setup
 
@@ -16,5 +19,5 @@ Put the following in `.helix/languages.toml` at the root of the `qmk_firmware` r
 [[language]]
 name = "c"
 auto-format = true
-formatter = { command = "qmkfmt" }
+formatter = { command = "qmkfmt", args = ["--split-spaces=8"] }
 ```
