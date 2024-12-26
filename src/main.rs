@@ -15,6 +15,10 @@ use clap::Parser;
 struct Cli {
     /// Path to keymap.c to format. If omitted, reads stdin and writes to stdout.
     path: Option<PathBuf>,
+
+    /// Number of spaces to insert between sides of the keyboard.
+    #[arg(long)]
+    split_spaces: Option<usize>,
 }
 
 fn clang_format(text: &str) -> String {
@@ -66,22 +70,22 @@ fn find_keymaps<'a>(
 fn main() {
     let cli = Cli::parse();
     match cli.path {
-        Some(path) => {
+        Some(ref path) => {
             let text = std::fs::read_to_string(&path).expect("Failed to read");
             let mut output = File::create(path).expect("Failed to open for writing");
-            format(&text, &mut output);
+            format(&text, &mut output, &cli);
         }
         None => {
             let mut text = String::new();
             std::io::stdin()
                 .read_to_string(&mut text)
                 .expect("Failed to read stdin");
-            format(&text, &mut std::io::stdout());
+            format(&text, &mut std::io::stdout(), &cli);
         }
     };
 }
 
-fn format(text: &str, output: &mut impl Write) {
+fn format(text: &str, output: &mut impl Write, cli: &Cli) {
     let language = tree_sitter_c::LANGUAGE.into();
     let mut parser = tree_sitter::Parser::new();
     parser
@@ -159,12 +163,24 @@ fn format(text: &str, output: &mut impl Write) {
 
         for row in rows {
             let fill = column_count - row.len();
-            table.add_row(
-                std::iter::repeat_n("", fill / 2)
-                    .chain(row.iter().map(|s| s.as_str()))
-                    .chain(std::iter::repeat_n("", fill / 2))
-                    .into(),
-            );
+            if let Some(split_spaces) = cli.split_spaces {
+                let (left, right) = row.split_at(row.len() / 2);
+                table.add_row(
+                    std::iter::repeat_n("", fill / 2)
+                        .chain(left.iter().map(|s| s.as_str()))
+                        .chain(std::iter::once(" ".repeat(split_spaces).as_str()))
+                        .chain(right.iter().map(|s| s.as_str()))
+                        .chain(std::iter::repeat_n("", fill / 2))
+                        .into(),
+                );
+            } else {
+                table.add_row(
+                    std::iter::repeat_n("", fill / 2)
+                        .chain(row.iter().map(|s| s.as_str()))
+                        .chain(std::iter::repeat_n("", fill / 2))
+                        .into(),
+                );
+            }
         }
 
         // Indent each line of the table

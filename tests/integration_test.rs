@@ -58,6 +58,7 @@ fn test_help() {
 fn test_fmt_dactyl_stdio() {
     let keyboard = "dactyl";
     let mut cmd = bin();
+    let mut cmd = cmd.arg("--split-spaces=4");
     let actual = fmt_pipe(&mut cmd, keyboard);
     assert_eq!(actual, expected(keyboard));
 }
@@ -74,6 +75,7 @@ fn test_fmt_moonlander_stdio() {
 fn test_fmt_dactyl_path() {
     let keyboard = "dactyl";
     let mut cmd = bin();
+    cmd.arg("--split-spaces=4");
     let actual = fmt_path(&mut cmd, keyboard);
     assert_eq!(actual, expected(keyboard));
 }
