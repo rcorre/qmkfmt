@@ -8,6 +8,8 @@ info:
 success: true
 exit_code: 0
 ----- stdout -----
+Formatter for QMK keymaps
+
 Usage: qmkfmt [OPTIONS] [PATH]
 
 Arguments:
