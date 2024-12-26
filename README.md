@@ -9,6 +9,8 @@ If `clang-format` is available on `$PATH`, `qmkfmt` will invoke it to format the
 
 `qmkfmt` infers the number of rows from the number of lines in each `LAYOUT`.
 
+Bug reports, feature requests, and contributions are welcome!
+
 # Installation
 
 Pre-compiled binaries are available on the [releases page](https://github.com/rcorre/qmkfmt/releases).
