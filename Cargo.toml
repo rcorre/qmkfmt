@@ -11,7 +11,6 @@ categories = ["development-tools"]
 
 [dependencies]
 clap = { version = "4.5.23", features = ["derive"] }
-prettytable = { version = "0.10.0", default-features = false }
 streaming-iterator = "0.1.9"
 tree-sitter = "0.24"
 tree-sitter-c = "0.23.2"

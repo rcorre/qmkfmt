@@ -1,5 +1,4 @@
 use core::str;
-use prettytable::Table;
 use std::{
     fs::File,
     io::{Read, Write},
@@ -130,8 +129,6 @@ fn format(text: &str, output: &mut impl Write, cli: &Cli) {
         write!(output, "{prefix}").expect("Failed to write layout prefix");
 
         // Print the formatted key list inside parens
-        let mut table = Table::new();
-        table.set_format(*prettytable::format::consts::FORMAT_CLEAN);
         let mut qc = args_node.walk();
 
         let keys: Vec<_> = args_node.named_children(&mut qc).collect();
@@ -167,36 +164,22 @@ fn format(text: &str, output: &mut impl Write, cli: &Cli) {
             }
         }
 
-        for row in rows {
-            let fill = column_count - row.len();
-            if let Some(split_spaces) = cli.split_spaces {
-                let (left, right) = row.split_at(row.len() / 2);
-                table.add_row(
-                    left.iter()
-                        .map(|s| s.as_str())
-                        .chain(std::iter::once(" ".repeat(split_spaces).as_str()))
-                        .chain(right.iter().map(|s| s.as_str()))
-                        .into(),
-                );
-            } else {
-                table.add_row(
-                    std::iter::repeat_n("", fill / 2)
-                        .chain(row.iter().map(|s| s.as_str()))
-                        .chain(std::iter::repeat_n("", fill / 2))
-                        .into(),
-                );
-            }
-        }
+        let column_sizes: Vec<_> = (0..column_count)
+            .map(|i| rows.iter().map(|row| row[i].len()).max().unwrap_or(0))
+            .collect();
 
-        // Indent each line of the table
-        let table = table
-            .to_string()
-            .lines()
-            .map(|line| line.trim_end())
-            .map(|line| format!("{indent}{indent}{line}"))
-            .collect::<Vec<_>>()
-            .join("\n");
-        write!(output, "(\n{table}\n{indent})").unwrap();
+        writeln!(output, "(").unwrap();
+        for row in rows {
+            write!(output, "{indent}{indent}").unwrap();
+            for (i, col) in row.iter().enumerate() {
+                if i == column_count / 2 {
+                    write!(output, "{}", " ".repeat(cli.split_spaces.unwrap_or(0))).unwrap();
+                }
+                write!(output, "{col:width$} ", width = column_sizes[i]).unwrap();
+            }
+            writeln!(output, "").unwrap();
+        }
+        write!(output, "{indent})").unwrap();
 
         let call_node = m.nodes_for_capture_index(call_idx).next().unwrap();
         last_byte = call_node.end_byte();
