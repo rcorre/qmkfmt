@@ -175,7 +175,8 @@ fn format(text: &str, output: &mut impl Write, cli: &Cli) {
                 if i == column_count / 2 {
                     write!(output, "{}", " ".repeat(cli.split_spaces.unwrap_or(0))).unwrap();
                 }
-                write!(output, "{col:width$} ", width = column_sizes[i]).unwrap();
+                let separator = if i + 1 < column_count { " " } else { "" };
+                write!(output, "{col:width$}{separator}", width = column_sizes[i]).unwrap();
             }
             writeln!(output, "").unwrap();
         }
