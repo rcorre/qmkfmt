@@ -18,6 +18,10 @@ struct Cli {
     /// Number of spaces to insert between sides of the keyboard.
     #[arg(long)]
     split_spaces: Option<usize>,
+
+    /// Add comment characters in a grid around keys.
+    #[arg(long)]
+    pretty: bool,
 }
 
 fn clang_format(text: &str) -> String {
@@ -168,18 +172,89 @@ fn format(text: &str, output: &mut impl Write, cli: &Cli) {
             .map(|i| rows.iter().map(|row| row[i].len()).max().unwrap_or(0))
             .collect();
 
+        let margin = 1;
+
         writeln!(output, "(").unwrap();
-        for row in rows {
-            write!(output, "{indent}{indent}").unwrap();
+        for row in rows.iter() {
+            // Write out the pretty border, if enabled
+            if cli.pretty {
+                let comment = "//+";
+                // dedent the line to accomodate the comment characters
+                let pre_indent = indent.to_string()
+                    + indent
+                        .strip_suffix(&" ".repeat(comment.len()))
+                        .unwrap_or(indent);
+                write!(output, "{pre_indent}{comment}").unwrap();
+                for (i, _) in row.iter().enumerate() {
+                    if let Some(spaces) = cli.split_spaces {
+                        if i == column_count / 2 {
+                            write!(output, "{}|", " ".repeat(spaces.saturating_sub(1))).unwrap();
+                        }
+                    }
+                    let margin = if i + 1 < column_count { margin } else { 0 };
+                    let corner = if i + 1 < column_count && i + 1 != column_count / 2 {
+                        "+"
+                    } else {
+                        "|"
+                    };
+                    let edge = "-".repeat((column_sizes[i] + margin).saturating_sub(corner.len()));
+                    let border = format!("{edge}{corner}");
+                    write!(output, "{border}",).unwrap();
+                }
+                writeln!(output, "").unwrap();
+                write!(output, "{indent}{indent}").unwrap();
+            } else {
+                write!(output, "{indent}{indent}").unwrap();
+            }
+
+            // Write out the row of keys
             for (i, col) in row.iter().enumerate() {
                 if i == column_count / 2 {
                     write!(output, "{}", " ".repeat(cli.split_spaces.unwrap_or(0))).unwrap();
                 }
-                let separator = if i + 1 < column_count { " " } else { "" };
+                let margin = if i + 1 < column_count { margin } else { 0 };
+                let separator = " ".repeat(margin);
                 write!(output, "{col:width$}{separator}", width = column_sizes[i]).unwrap();
             }
             writeln!(output, "").unwrap();
         }
+
+        if cli.pretty {
+            // Add a final border below the last row
+            if let Some(row) = rows.last() {
+                let comment = "// ";
+                // dedent the line to accomodate the comment characters
+                let pre_indent = indent.to_string()
+                    + indent
+                        .strip_suffix(&" ".repeat(comment.len()))
+                        .unwrap_or(indent);
+                write!(output, "{pre_indent}{comment}").unwrap();
+                for (i, col) in row.iter().enumerate() {
+                    if let Some(spaces) = cli.split_spaces {
+                        if i == column_count / 2 {
+                            write!(output, "{}|", " ".repeat(spaces.saturating_sub(1))).unwrap();
+                        }
+                    }
+                    let margin = if i + 1 < column_count { margin } else { 0 };
+                    let corner = if i + 1 < column_count && i + 1 != column_count / 2 {
+                        "+"
+                    } else {
+                        "|"
+                    };
+                    let edge = "-".repeat((column_sizes[i] + margin).saturating_sub(corner.len()));
+                    let border = format!("{edge}{corner}");
+                    if col.is_empty() {
+                        // Empty column representing no key at this part of the matrix.
+                        // Don't fill in a grid here.
+                        write!(output, "{:width$}", "", width = column_sizes[i] + margin).unwrap();
+                    } else {
+                        write!(output, "{border}",).unwrap();
+                    }
+                }
+                writeln!(output, "").unwrap();
+            }
+        }
+
         write!(output, "{indent})").unwrap();
 
         let call_node = m.nodes_for_capture_index(call_idx).next().unwrap();

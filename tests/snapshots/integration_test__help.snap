@@ -17,6 +17,7 @@ Arguments:
 
 Options:
       --split-spaces <SPLIT_SPACES>  Number of spaces to insert between sides of the keyboard
+      --pretty                       Add comment characters in a grid around keys
   -h, --help                         Print help
   -V, --version                      Print version
 
