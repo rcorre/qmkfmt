@@ -154,23 +154,28 @@ fn format(text: &str, output: &mut impl Write, cli: &Cli) {
             rows[row]
                 .push(node_to_text(&text, &key) + if i == (keys.len() - 1) { "" } else { "," });
         }
+        let column_count = rows.iter().map(|r| r.len()).max().expect("No rows");
 
-        let column_count = rows
-            .iter()
-            .map(|row| row.len())
-            .max()
-            .expect("Row has 0 columns");
+        // Pad shorter rows on the left/right
+        for row in rows.iter_mut() {
+            let fill = column_count - row.len();
+            for _ in 0..fill / 2 {
+                row.insert(0, "".into())
+            }
+            for _ in 0..fill / 2 {
+                row.push("".into())
+            }
+        }
 
         for row in rows {
             let fill = column_count - row.len();
             if let Some(split_spaces) = cli.split_spaces {
                 let (left, right) = row.split_at(row.len() / 2);
                 table.add_row(
-                    std::iter::repeat_n("", fill / 2)
-                        .chain(left.iter().map(|s| s.as_str()))
+                    left.iter()
+                        .map(|s| s.as_str())
                         .chain(std::iter::once(" ".repeat(split_spaces).as_str()))
                         .chain(right.iter().map(|s| s.as_str()))
-                        .chain(std::iter::repeat_n("", fill / 2))
                         .into(),
                 );
             } else {
