@@ -118,7 +118,7 @@ fn format(text: &str, output: &mut impl Write, cli: &Cli) {
             .split_once(|c: char| !c.is_whitespace())
             .unwrap();
         let name = node_to_text(&text, &name);
-        if !name.starts_with("LAYOUT_") {
+        if !name.starts_with("LAYOUT") {
             continue;
         }
 
