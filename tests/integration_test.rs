@@ -1,3 +1,5 @@
+use core::str;
+use insta::assert_snapshot;
 use insta_cmd::{assert_cmd_snapshot, get_cargo_bin};
 use pretty_assertions::assert_eq;
 use std::{
@@ -6,24 +8,21 @@ use std::{
     process::{Command, Stdio},
 };
 
-fn bin() -> Command {
+fn cmd(args: &[&str]) -> Command {
     let mut cmd = Command::new(get_cargo_bin(env!("CARGO_PKG_NAME")));
     cmd.stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        .stderr(Stdio::piped())
+        .args(args);
     cmd
 }
 
 fn before_path(keyboard: &str) -> PathBuf {
-    format!("testdata/before/{keyboard}/keymaps/default/keymap.c").into()
+    format!("testdata/{keyboard}/keymaps/default/keymap.c").into()
 }
 
-fn after_path(keyboard: &str) -> PathBuf {
-    format!("testdata/after/{keyboard}/keymaps/default/keymap.c").into()
-}
-
-fn fmt_pipe(cmd: &mut Command, keyboard: &str) -> String {
-    let mut cmd = cmd.spawn().unwrap();
+fn fmt_pipe(keyboard: &str, args: &[&str]) -> String {
+    let mut cmd = cmd(args).spawn().unwrap();
     let keymap = std::fs::read_to_string(before_path(keyboard)).unwrap();
     cmd.stdin
         .take()
@@ -31,11 +30,12 @@ fn fmt_pipe(cmd: &mut Command, keyboard: &str) -> String {
         .write_all(keymap.as_bytes())
         .unwrap();
     let out = cmd.wait_with_output().unwrap();
-    assert!(out.status.success());
+    assert!(out.status.success(), "{:?}", str::from_utf8(&out.stderr));
     String::from_utf8(out.stdout).unwrap()
 }
 
-fn fmt_path(cmd: &mut Command, keyboard: &str) -> String {
+fn fmt_path(keyboard: &str, args: &[&str]) -> String {
+    let mut cmd = cmd(args);
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("keymap.c");
     std::fs::copy(before_path(keyboard), &path).unwrap();
@@ -45,45 +45,27 @@ fn fmt_path(cmd: &mut Command, keyboard: &str) -> String {
     std::fs::read_to_string(path).unwrap()
 }
 
-fn expected(keyboard: &str) -> String {
-    std::fs::read_to_string(after_path(keyboard)).unwrap()
-}
-
 #[test]
 fn test_help() {
-    assert_cmd_snapshot!(bin().arg("--help"));
+    assert_cmd_snapshot!(cmd(&[]).arg("--help"));
 }
 
 #[test]
-fn test_fmt_dactyl_stdio() {
+fn test_fmt_dactyl() {
     let keyboard = "dactyl";
-    let mut cmd = bin();
-    let mut cmd = cmd.arg("--split-spaces=4");
-    let actual = fmt_pipe(&mut cmd, keyboard);
-    assert_eq!(actual, expected(keyboard));
+    let args = &["--split-spaces=4"];
+
+    let actual = fmt_pipe(keyboard, args);
+    assert_eq!(actual, fmt_path(keyboard, args));
+    assert_snapshot!(actual);
 }
 
 #[test]
-fn test_fmt_moonlander_stdio() {
+fn test_fmt_moonlander() {
     let keyboard = "moonlander";
-    let mut cmd = bin();
-    let actual = fmt_pipe(&mut cmd, keyboard);
-    assert_eq!(actual, expected(keyboard));
-}
+    let args = &[];
 
-#[test]
-fn test_fmt_dactyl_path() {
-    let keyboard = "dactyl";
-    let mut cmd = bin();
-    cmd.arg("--split-spaces=4");
-    let actual = fmt_path(&mut cmd, keyboard);
-    assert_eq!(actual, expected(keyboard));
-}
-
-#[test]
-fn test_fmt_moonlander_path() {
-    let keyboard = "moonlander";
-    let mut cmd = bin();
-    let actual = fmt_path(&mut cmd, keyboard);
-    assert_eq!(actual, expected(keyboard));
+    let actual = fmt_pipe(keyboard, args);
+    assert_eq!(actual, fmt_path(keyboard, args));
+    assert_snapshot!(actual);
 }
