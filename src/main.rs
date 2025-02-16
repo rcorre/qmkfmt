@@ -153,19 +153,21 @@ fn format(text: &str, output: &mut impl Write, cli: &Cli) {
         }
         let column_count = rows.iter().map(|r| r.len()).max().expect("No rows");
 
-        // Pad shorter rows on the left/right
+        // Pad shorter rows on the left
         for row in rows.iter_mut() {
             let fill = column_count - row.len();
             for _ in 0..fill / 2 {
                 row.insert(0, "".into())
             }
-            for _ in 0..fill / 2 {
-                row.push("".into())
-            }
         }
 
         let column_sizes: Vec<_> = (0..column_count)
-            .map(|i| rows.iter().map(|row| row[i].len()).max().unwrap_or(0))
+            .map(|i| {
+                rows.iter()
+                    .map(|row| row.get(i).map(String::len).unwrap_or(0))
+                    .max()
+                    .unwrap_or(0)
+            })
             .collect();
 
         writeln!(output, "(").unwrap();
@@ -175,8 +177,13 @@ fn format(text: &str, output: &mut impl Write, cli: &Cli) {
                 if i == column_count / 2 {
                     write!(output, "{}", " ".repeat(cli.split_spaces.unwrap_or(0))).unwrap();
                 }
-                let separator = if i + 1 < column_count { " " } else { "" };
-                write!(output, "{col:width$}{separator}", width = column_sizes[i]).unwrap();
+                let separator = if i + 1 < row.len() { " " } else { "" };
+                let width = if i + 1 < row.len() {
+                    column_sizes[i]
+                } else {
+                    0
+                };
+                write!(output, "{col:width$}{separator}").unwrap();
             }
             writeln!(output, "").unwrap();
         }
