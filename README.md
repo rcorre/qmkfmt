@@ -27,6 +27,28 @@ cargo install --git https://github.com/rcorre/qmkfmt
 `qmkfmt` infers the number of rows from the number of lines in each `LAYOUT`.
 If a row has less than the maximum number of columns (e.g. a thumb cluster), it is centered.
 
+For example, the following keymap:
+
+```c
+[0] = LAYOUT_split_3x6_3(
+KC_TAB,KC_Q,KC_W,KC_E,KC_R,KC_T,KC_Y,KC_U,KC_I,KC_O,KC_P,KC_PIPE,
+KC_ESC,LALT_T(KC_A),RGUI_T(KC_S),LCTL_T(KC_D),LSFT_T(KC_F),KC_G,KC_H,RSFT_T(KC_J),RCTL_T(KC_K),RGUI_T(KC_L),RALT_T(KC_SCLN),KC_QUOT,
+KC_LSFT,KC_Z,KC_X,KC_C,KC_V,KC_B,KC_N,KC_M,KC_COMM,KC_DOT,KC_SLSH,KC_RSFT,
+KC_SPC,LT(LYR_NAV, KC_TAB),KC_ESC,LT(1, KC_ENT),KC_BSPC,KC_ESC
+)
+```
+
+Will be reformatted to:
+
+```c
+[0] = LAYOUT_split_3x6_3(
+    KC_TAB,  KC_Q,         KC_W,         KC_E,         KC_R,                KC_T,   KC_Y,          KC_U,         KC_I,         KC_O,         KC_P,            KC_PIPE,
+    KC_ESC,  LALT_T(KC_A), RGUI_T(KC_S), LCTL_T(KC_D), LSFT_T(KC_F),        KC_G,   KC_H,          RSFT_T(KC_J), RCTL_T(KC_K), RGUI_T(KC_L), RALT_T(KC_SCLN), KC_QUOT,
+    KC_LSFT, KC_Z,         KC_X,         KC_C,         KC_V,                KC_B,   KC_N,          KC_M,         KC_COMM,      KC_DOT,       KC_SLSH,         KC_RSFT,
+                                         KC_SPC,       LT(LYR_NAV, KC_TAB), KC_ESC, LT(1, KC_ENT), KC_BSPC,      KC_ESC
+)
+```
+
 If `clang-format` is available on `$PATH`, `qmkfmt` will invoke it to format the rest of the file.
 
 # Configuration
