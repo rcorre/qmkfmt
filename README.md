@@ -30,6 +30,30 @@ If a row has less than the maximum number of columns (e.g. a thumb cluster), it 
 For example, the following keymap:
 
 ```c
+const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
+LAYOUT_split_3x6_3(
+KC_NO, KC_NO, KC_NO,KC_NO, KC_NO, KC_NO,
+KC_NO, KC_NO, KC_NO,  KC_NO, KC_NO, KC_NO,
+KC_NO, KC_NO,   KC_NO, KC_NO,
+KC_NO,       KC_NO
+),
+```
+
+Would be reformatted as:
+
+```c
+const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
+LAYOUT_split_3x6_3(
+    KC_NO, KC_NO, KC_NO,         KC_NO, KC_NO, KC_NO,
+    KC_NO, KC_NO, KC_NO,         KC_NO, KC_NO, KC_NO,
+           KC_NO, KC_NO,         KC_NO, KC_NO,
+                  KC_NO,         KC_NO
+),
+```
+
+The following keymap:
+
+```c
 [0] = LAYOUT_split_3x6_3(
 KC_TAB,KC_Q,KC_W,KC_E,KC_R,KC_T,KC_Y,KC_U,KC_I,KC_O,KC_P,KC_PIPE,
 KC_ESC,LALT_T(KC_A),RGUI_T(KC_S),LCTL_T(KC_D),LSFT_T(KC_F),KC_G,KC_H,RSFT_T(KC_J),RCTL_T(KC_K),RGUI_T(KC_L),RALT_T(KC_SCLN),KC_QUOT,
