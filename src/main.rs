@@ -97,7 +97,11 @@ fn format(text: &str, output: &mut impl Write, cli: &Cli) {
     let keymaps = find_keymaps(&language, &tree, &text).expect("No keymaps found");
     let prefix = &text.as_bytes()[0..keymaps.start_byte()];
     let prefix = str::from_utf8(prefix).expect("Text is not utf-8");
-    write!(output, "{prefix}").expect("Failed to write prefix");
+    let prefix = clang_format(prefix);
+
+    // clang-format will strip trailing newlines here, but we want to
+    // keep a space between the prefix and the keymaps, so use writeln
+    writeln!(output, "{prefix}").expect("Failed to write prefix");
     let mut last_byte = keymaps.start_byte();
 
     let query = tree_sitter::Query::new(

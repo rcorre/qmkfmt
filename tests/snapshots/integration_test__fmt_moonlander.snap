@@ -15,7 +15,7 @@ expression: actual
 #define LYR_FUN 5
 
 enum custom_keycodes {
-  RGB_SLD = ML_SAFE_RANGE,
+    RGB_SLD = ML_SAFE_RANGE,
 };
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
