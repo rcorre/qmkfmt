@@ -1,6 +1,6 @@
 [package]
 name = "qmkfmt"
-version = "0.1.7"
+version = "0.1.8"
 edition = "2021"
 license = "MIT"
 description = "Formatter for QMK keymaps"
@@ -11,6 +11,8 @@ categories = ["development-tools"]
 
 [dependencies]
 clap = { version = "4.5.23", features = ["derive"] }
+env_logger = "0.11.6"
+log = "0.4.26"
 streaming-iterator = "0.1.9"
 tree-sitter = "0.24"
 tree-sitter-c = "0.23.2"
