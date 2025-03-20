@@ -50,6 +50,7 @@ Will be reformatted to:
 ```
 
 If `clang-format` is available on `$PATH`, `qmkfmt` will invoke it to format the rest of the file.
+You can pass `--clang-format=/path/to/clang-format` to use a specific `clang-format`, or `--no-clang-format` to disable this.
 
 # Configuration
 

@@ -2,7 +2,7 @@ use core::str;
 use std::{
     fs::File,
     io::{Read, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::Stdio,
 };
 use streaming_iterator::StreamingIterator;
@@ -18,10 +18,22 @@ struct Cli {
     /// Number of spaces to insert between sides of the keyboard.
     #[arg(long)]
     split_spaces: Option<usize>,
+
+    /// Disable running clang-format.
+    #[arg(long)]
+    no_clang_format: bool,
+
+    /// Path to clang-format, or empty to disable clang-format.
+    #[arg(long, default_value = "clang-format")]
+    clang_format: PathBuf,
 }
 
-fn clang_format(text: &str) -> String {
-    let mut cmd = std::process::Command::new("clang-format");
+fn clang_format(cli: &Cli, text: &str) -> String {
+    if cli.no_clang_format {
+        log::debug!("clang-format disabled");
+        return text.to_string();
+    }
+    let mut cmd = std::process::Command::new(&cli.clang_format);
     cmd.stdin(Stdio::piped()).stdout(Stdio::piped());
     let mut cmd = match cmd.spawn() {
         Ok(cmd) => cmd,
@@ -45,7 +57,9 @@ fn clang_format(text: &str) -> String {
         panic!("clang-format exited with code: {:?}", output.status.code());
     }
     log::debug!("clang-format succeeded");
-    String::from_utf8(output.stdout).expect("clang-format output is not utf-8")
+
+    // Add a newline, to mantain spacing from the start of keymaps.
+    String::from_utf8(output.stdout).expect("clang-format output is not utf-8") + "\n"
 }
 
 fn find_keymaps<'a>(
@@ -104,13 +118,11 @@ fn format(text: &str, output: &mut impl Write, cli: &Cli) {
     let keymaps = find_keymaps(&language, &tree, &text).expect("No keymaps found");
     let prefix = &text.as_bytes()[0..keymaps.start_byte()];
     let prefix = str::from_utf8(prefix).expect("Text is not utf-8");
-    let prefix = clang_format(prefix);
+    let prefix = clang_format(&cli, prefix);
 
     log::debug!("Printing prefix");
 
-    // clang-format will strip trailing newlines here, but we want to
-    // keep a space between the prefix and the keymaps, so use writeln
-    writeln!(output, "{prefix}").expect("Failed to write prefix");
+    write!(output, "{prefix}").expect("Failed to write prefix");
     let mut last_byte = keymaps.start_byte();
 
     let query = tree_sitter::Query::new(
@@ -230,7 +242,7 @@ fn format(text: &str, output: &mut impl Write, cli: &Cli) {
 
     let rest = &text.as_bytes()[keymaps_end..];
     let rest = str::from_utf8(rest).expect("Text is not utf-8");
-    let rest = clang_format(rest);
+    let rest = clang_format(&cli, rest);
     write!(output, "{rest}").unwrap();
 
     log::info!("Formatting complete!");

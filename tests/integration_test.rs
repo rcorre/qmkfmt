@@ -39,10 +39,19 @@ fn fmt_path(keyboard: &str, args: &[&str]) -> String {
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("keymap.c");
     std::fs::copy(before_path(keyboard), &path).unwrap();
+
     let cmd = cmd.arg(&path);
     let out = cmd.output().unwrap();
     assert!(out.status.success());
-    std::fs::read_to_string(path).unwrap()
+
+    let res = std::fs::read_to_string(&path).unwrap();
+
+    // repeat, to ensure nothing changes with multiple formats
+    let out = cmd.output().unwrap();
+    assert!(out.status.success());
+    assert_eq!(std::fs::read_to_string(path).unwrap(), res);
+
+    res
 }
 
 #[test]
@@ -64,6 +73,16 @@ fn test_fmt_dactyl() {
 fn test_fmt_moonlander() {
     let keyboard = "moonlander";
     let args = &[];
+
+    let actual = fmt_pipe(keyboard, args);
+    assert_eq!(actual, fmt_path(keyboard, args));
+    assert_snapshot!(actual);
+}
+
+#[test]
+fn test_fmt_moonlander_no_clang() {
+    let keyboard = "moonlander";
+    let args = &["--no-clang-format"];
 
     let actual = fmt_pipe(keyboard, args);
     assert_eq!(actual, fmt_path(keyboard, args));
