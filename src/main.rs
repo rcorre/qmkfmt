@@ -2,7 +2,7 @@ use core::str;
 use std::{
     fs::File,
     io::{Read, Write},
-    path::{Path, PathBuf},
+    path::PathBuf,
     process::Stdio,
 };
 use streaming_iterator::StreamingIterator;
@@ -68,7 +68,7 @@ fn find_keymaps<'a>(
     text: &str,
 ) -> Option<tree_sitter::Node<'a>> {
     let query = tree_sitter::Query::new(
-        &language,
+        language,
         "(declaration (init_declarator (array_declarator (array_declarator (array_declarator (identifier) @id))))) @decl")
     .unwrap();
     let mut qc = tree_sitter::QueryCursor::new();
@@ -76,7 +76,7 @@ fn find_keymaps<'a>(
 
     while let Some(x) = it.next() {
         let node = x.captures[1].node;
-        if node_to_text(&text, &node) == "keymaps" {
+        if node_to_text(text, &node) == "keymaps" {
             return Some(x.captures[0].node);
         }
     }
@@ -90,7 +90,7 @@ fn main() {
     match cli.path {
         Some(ref path) => {
             log::info!("Formatting path: {path:?}");
-            let text = std::fs::read_to_string(&path).expect("Failed to read");
+            let text = std::fs::read_to_string(path).expect("Failed to read");
             let mut output = File::create(path).expect("Failed to open for writing");
             format(&text, &mut output, &cli);
         }
@@ -112,13 +112,13 @@ fn format(text: &str, output: &mut impl Write, cli: &Cli) {
         .set_language(&language)
         .expect("Error loading C parser");
 
-    let tree = parser.parse(&text, None).unwrap();
+    let tree = parser.parse(text, None).unwrap();
 
     // Print everything before keymaps, possibly formatting with clang-format
-    let keymaps = find_keymaps(&language, &tree, &text).expect("No keymaps found");
+    let keymaps = find_keymaps(&language, &tree, text).expect("No keymaps found");
     let prefix = &text.as_bytes()[0..keymaps.start_byte()];
     let prefix = str::from_utf8(prefix).expect("Text is not utf-8");
-    let prefix = clang_format(&cli, prefix);
+    let prefix = clang_format(cli, prefix);
 
     log::debug!("Printing prefix");
 
@@ -142,7 +142,7 @@ fn format(text: &str, output: &mut impl Write, cli: &Cli) {
         let (indent, _) = lines[name.start_position().row]
             .split_once(|c: char| !c.is_whitespace())
             .unwrap();
-        let name = node_to_text(&text, &name);
+        let name = node_to_text(text, &name);
         log::trace!("Parsed call_expression: {name}");
 
         if !name.starts_with("LAYOUT") {
@@ -179,8 +179,7 @@ fn format(text: &str, output: &mut impl Write, cli: &Cli) {
         let mut rows = vec![vec![]; row_count];
         for (i, key) in keys.iter().enumerate() {
             let row = key.start_position().row - min_row;
-            rows[row]
-                .push(node_to_text(&text, &key) + if i == (keys.len() - 1) { "" } else { "," });
+            rows[row].push(node_to_text(text, key) + if i == (keys.len() - 1) { "" } else { "," });
         }
         let column_count = rows.iter().map(|r| r.len()).max().expect("No rows");
 
@@ -223,7 +222,7 @@ fn format(text: &str, output: &mut impl Write, cli: &Cli) {
                 };
                 write!(output, "{col:width$}{separator}").unwrap();
             }
-            writeln!(output, "").unwrap();
+            writeln!(output).unwrap();
         }
         write!(output, "{indent})").unwrap();
 
@@ -242,7 +241,7 @@ fn format(text: &str, output: &mut impl Write, cli: &Cli) {
 
     let rest = &text.as_bytes()[keymaps_end..];
     let rest = str::from_utf8(rest).expect("Text is not utf-8");
-    let rest = clang_format(&cli, rest);
+    let rest = clang_format(cli, rest);
     write!(output, "{rest}").unwrap();
 
     log::info!("Formatting complete!");
