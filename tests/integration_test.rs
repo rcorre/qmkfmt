@@ -88,3 +88,14 @@ fn test_fmt_moonlander_no_clang() {
     assert_eq!(actual, fmt_path(keyboard, args));
     assert_snapshot!(actual);
 }
+
+// #2: LAYOUT statement outside `keymap` should not crash
+#[test]
+fn test_fmt_layout_outside_keymap() {
+    let keyboard = "layout_outside_keymap";
+    let args = &[];
+
+    let actual = fmt_pipe(keyboard, args);
+    assert_eq!(actual, fmt_path(keyboard, args));
+    assert_snapshot!(actual);
+}

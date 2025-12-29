@@ -136,7 +136,7 @@ fn format(text: &str, output: &mut impl Write, cli: &Cli) {
 
     let lines: Vec<_> = text.lines().collect();
     let mut qc = tree_sitter::QueryCursor::new();
-    let mut it = qc.matches(&query, tree.root_node(), text.as_bytes());
+    let mut it = qc.matches(&query, keymaps, text.as_bytes());
     while let Some(m) = it.next() {
         let name = m.nodes_for_capture_index(id_idx).next().unwrap();
         let (indent, _) = lines[name.start_position().row]
