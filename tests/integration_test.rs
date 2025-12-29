@@ -92,6 +92,8 @@ fn test_fmt_moonlander_no_clang() {
 // #2: LAYOUT statement outside `keymap` should not crash
 #[test]
 fn test_fmt_layout_outside_keymap() {
+    let _ = env_logger::builder().is_test(true).try_init();
+
     let keyboard = "layout_outside_keymap";
     let args = &[];
 

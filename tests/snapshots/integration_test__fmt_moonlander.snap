@@ -14,9 +14,7 @@ expression: actual
 #define LYR_NUM 4
 #define LYR_FUN 5
 
-enum custom_keycodes {
-    RGB_SLD = ML_SAFE_RANGE,
-};
+enum custom_keycodes { RGB_SLD = ML_SAFE_RANGE, };
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   [LYR_BSE] = LAYOUT_moonlander(
@@ -67,7 +65,8 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
              _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______,
                                         _______, _______, _______, _______, _______, _______
   ),
-};
+}
+;
 
 void housekeeping_task_user(void) {
     if (is_transport_connected()) {

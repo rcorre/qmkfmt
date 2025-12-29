@@ -44,7 +44,7 @@ fn clang_format(cli: &Cli, text: &str) -> String {
         Err(err) => panic!("Failed to exec clang-format: {err:?}"),
     };
 
-    log::debug!("Using clang-format: {cmd:?}");
+    log::trace!("Running clang-format on text: {text:#?}");
     cmd.stdin
         .take()
         .unwrap()
@@ -58,29 +58,11 @@ fn clang_format(cli: &Cli, text: &str) -> String {
     }
     log::debug!("clang-format succeeded");
 
+    let out = String::from_utf8(output.stdout).expect("clang-format output is not utf-8");
+    log::trace!("clang-format output: {out:#?}");
+
     // Add a newline, to mantain spacing from the start of keymaps.
-    String::from_utf8(output.stdout).expect("clang-format output is not utf-8") + "\n"
-}
-
-fn find_keymaps<'a>(
-    language: &'a tree_sitter::Language,
-    tree: &'a tree_sitter::Tree,
-    text: &str,
-) -> Option<tree_sitter::Node<'a>> {
-    let query = tree_sitter::Query::new(
-        language,
-        "(declaration (init_declarator (array_declarator (array_declarator (array_declarator (identifier) @id))))) @decl")
-    .unwrap();
-    let mut qc = tree_sitter::QueryCursor::new();
-    let mut it = qc.matches(&query, tree.root_node(), text.as_bytes());
-
-    while let Some(x) = it.next() {
-        let node = x.captures[1].node;
-        if node_to_text(text, &node) == "keymaps" {
-            return Some(x.captures[0].node);
-        }
-    }
-    None
+    out + "\n"
 }
 
 fn main() {
@@ -114,16 +96,7 @@ fn format(text: &str, output: &mut impl Write, cli: &Cli) {
 
     let tree = parser.parse(text, None).unwrap();
 
-    // Print everything before keymaps, possibly formatting with clang-format
-    let keymaps = find_keymaps(&language, &tree, text).expect("No keymaps found");
-    let prefix = &text.as_bytes()[0..keymaps.start_byte()];
-    let prefix = str::from_utf8(prefix).expect("Text is not utf-8");
-    let prefix = clang_format(cli, prefix);
-
-    log::debug!("Printing prefix");
-
-    write!(output, "{prefix}").expect("Failed to write prefix");
-    let mut last_byte = keymaps.start_byte();
+    let mut last_byte = 0;
 
     let query = tree_sitter::Query::new(
         &language,
@@ -136,7 +109,7 @@ fn format(text: &str, output: &mut impl Write, cli: &Cli) {
 
     let lines: Vec<_> = text.lines().collect();
     let mut qc = tree_sitter::QueryCursor::new();
-    let mut it = qc.matches(&query, keymaps, text.as_bytes());
+    let mut it = qc.matches(&query, tree.root_node(), text.as_bytes());
     while let Some(m) = it.next() {
         let name = m.nodes_for_capture_index(id_idx).next().unwrap();
         let (indent, _) = lines[name.start_position().row]
@@ -230,16 +203,9 @@ fn format(text: &str, output: &mut impl Write, cli: &Cli) {
         last_byte = call_node.end_byte();
     }
 
-    log::debug!("Keymap formatting complete");
-
-    let keymaps_end = keymaps.end_byte();
-    let rest = &text.as_bytes()[last_byte..keymaps_end];
-    let rest = str::from_utf8(rest).expect("Text is not utf-8");
-    write!(output, "{rest}").unwrap();
-
     log::debug!("Writing suffix");
 
-    let rest = &text.as_bytes()[keymaps_end..];
+    let rest = &text.as_bytes()[last_byte..];
     let rest = str::from_utf8(rest).expect("Text is not utf-8");
     let rest = clang_format(cli, rest);
     write!(output, "{rest}").unwrap();
