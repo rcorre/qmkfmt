@@ -8,6 +8,7 @@ use std::{
 use streaming_iterator::StreamingIterator;
 
 use clap::Parser;
+use tree_sitter::Node;
 
 #[derive(Debug, Parser)]
 #[command(version, about, long_about = None)]
@@ -87,6 +88,30 @@ fn main() {
     };
 }
 
+fn key_rows(text: &str, keys: &[Node<'_>]) -> Vec<Vec<String>> {
+    // Group keys by row
+    let min_row = keys
+        .iter()
+        .map(|node| node.start_position().row)
+        .min()
+        .unwrap();
+    let max_row = keys
+        .iter()
+        .map(|node| node.start_position().row)
+        .max()
+        .unwrap();
+
+    let row_count = max_row - min_row + 1;
+    log::debug!("Row count: {row_count}");
+    let mut rows = vec![vec![]; row_count];
+    for (i, key) in keys.iter().enumerate() {
+        let row = key.start_position().row - min_row;
+        rows[row].push(node_to_text(text, key) + if i == (keys.len() - 1) { "" } else { "," });
+    }
+
+    rows
+}
+
 fn format(text: &str, output: &mut impl Write, cli: &Cli) {
     let language = tree_sitter_c::LANGUAGE.into();
     let mut parser = tree_sitter::Parser::new();
@@ -94,34 +119,47 @@ fn format(text: &str, output: &mut impl Write, cli: &Cli) {
         .set_language(&language)
         .expect("Error loading C parser");
 
-    let tree = parser.parse(text, None).unwrap();
-
-    let mut last_byte = 0;
-
     let query = tree_sitter::Query::new(
         &language,
-        "(call_expression (identifier) @id (argument_list) @args) @call",
+        r#"(call_expression (identifier) @id (#match? @id "^LAYOUT") (argument_list) @args) @call"#,
     )
     .unwrap();
     let id_idx = query.capture_index_for_name("id").unwrap();
     let args_idx = query.capture_index_for_name("args").unwrap();
     let call_idx = query.capture_index_for_name("call").unwrap();
 
+    // First, extract all the layouts before clang-format
+    let tree = parser.parse(text, None).unwrap();
+    let mut layouts = vec![];
+    let mut qc = tree_sitter::QueryCursor::new();
+    let mut it = qc.matches(&query, tree.root_node(), text.as_bytes());
+    while let Some(m) = it.next() {
+        let args_node = m.nodes_for_capture_index(args_idx).next().unwrap();
+        let mut qc = args_node.walk();
+        let keys: Vec<_> = args_node.named_children(&mut qc).collect();
+        let rows = key_rows(text, &keys);
+        layouts.push(rows);
+    }
+    layouts.reverse(); // so we can pop
+
+    // Run clang-format on the document
+    let text = &clang_format(cli, text);
+
+    // Parse again, post-clang-format
+    let tree = parser.parse(text, None).unwrap();
+
     let lines: Vec<_> = text.lines().collect();
     let mut qc = tree_sitter::QueryCursor::new();
     let mut it = qc.matches(&query, tree.root_node(), text.as_bytes());
+    let mut last_byte = 0;
     while let Some(m) = it.next() {
         let name = m.nodes_for_capture_index(id_idx).next().unwrap();
         let (indent, _) = lines[name.start_position().row]
             .split_once(|c: char| !c.is_whitespace())
             .unwrap();
+        let indent = if indent.is_empty() { "    " } else { indent };
         let name = node_to_text(text, &name);
         log::trace!("Parsed call_expression: {name}");
-
-        if !name.starts_with("LAYOUT") {
-            continue;
-        }
-
         log::trace!("Printing prefix to layout: {name}");
 
         // Print everything before the call expression
@@ -131,29 +169,7 @@ fn format(text: &str, output: &mut impl Write, cli: &Cli) {
         write!(output, "{prefix}").expect("Failed to write layout prefix");
 
         // Print the formatted key list inside parens
-        let mut qc = args_node.walk();
-
-        let keys: Vec<_> = args_node.named_children(&mut qc).collect();
-
-        // Group keys by row
-        let min_row = keys
-            .iter()
-            .map(|node| node.start_position().row)
-            .min()
-            .unwrap();
-        let max_row = keys
-            .iter()
-            .map(|node| node.start_position().row)
-            .max()
-            .unwrap();
-
-        let row_count = max_row - min_row + 1;
-        log::debug!("Row count: {row_count}");
-        let mut rows = vec![vec![]; row_count];
-        for (i, key) in keys.iter().enumerate() {
-            let row = key.start_position().row - min_row;
-            rows[row].push(node_to_text(text, key) + if i == (keys.len() - 1) { "" } else { "," });
-        }
+        let mut rows = layouts.pop().unwrap();
         let column_count = rows.iter().map(|r| r.len()).max().expect("No rows");
 
         log::trace!("Rows: {rows:?}");
@@ -207,7 +223,6 @@ fn format(text: &str, output: &mut impl Write, cli: &Cli) {
 
     let rest = &text.as_bytes()[last_byte..];
     let rest = str::from_utf8(rest).expect("Text is not utf-8");
-    let rest = clang_format(cli, rest);
     write!(output, "{rest}").unwrap();
 
     log::info!("Formatting complete!");

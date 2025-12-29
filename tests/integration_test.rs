@@ -101,3 +101,16 @@ fn test_fmt_layout_outside_keymap() {
     assert_eq!(actual, fmt_path(keyboard, args));
     assert_snapshot!(actual);
 }
+
+// #2: LAYOUT statement outside `keymap` should not crash
+#[test]
+fn test_fmt_layout_outside_keymap_no_clang() {
+    let _ = env_logger::builder().is_test(true).try_init();
+
+    let keyboard = "layout_outside_keymap";
+    let args = &["--no-clang-format"];
+
+    let actual = fmt_pipe(keyboard, args);
+    assert_eq!(actual, fmt_path(keyboard, args));
+    assert_snapshot!(actual);
+}
