@@ -112,6 +112,69 @@ fn key_rows(text: &str, keys: &[Node<'_>]) -> Vec<Vec<String>> {
     rows
 }
 
+/// Write a grid of rows with aligned columns, centering shorter rows.
+fn write_grid(
+    output: &mut impl Write,
+    rows: &mut [Vec<String>],
+    indent: &str,
+    split_spaces: usize,
+) {
+    let column_count = rows.iter().map(|r| r.len()).max().unwrap_or(0);
+
+    // Pad shorter rows on the left
+    for row in rows.iter_mut() {
+        let fill = column_count - row.len();
+        for _ in 0..fill / 2 {
+            row.insert(0, "".into())
+        }
+    }
+
+    let column_sizes: Vec<_> = (0..column_count)
+        .map(|i| {
+            rows.iter()
+                .map(|row| row.get(i).map(String::len).unwrap_or(0))
+                .max()
+                .unwrap_or(0)
+        })
+        .collect();
+
+    for row in rows.iter() {
+        write!(output, "{indent}{indent}").unwrap();
+        for (i, col) in row.iter().enumerate() {
+            if i == column_count / 2 {
+                write!(output, "{}", " ".repeat(split_spaces)).unwrap();
+            }
+            let separator = if i + 1 < row.len() { " " } else { "" };
+            let width = if i + 1 < row.len() {
+                column_sizes[i]
+            } else {
+                0
+            };
+            write!(output, "{col:width$}{separator}").unwrap();
+        }
+        writeln!(output).unwrap();
+    }
+}
+
+/// Build ledmap rows from flat tuples using the given row structure (items per row).
+fn build_ledmap_rows(text: &str, tuples: &[Node<'_>], row_structure: &[usize]) -> Vec<Vec<String>> {
+    let mut rows = vec![];
+    let mut idx = 0;
+    for &cols_in_row in row_structure {
+        let mut row = vec![];
+        for _ in 0..cols_in_row {
+            if idx < tuples.len() {
+                let s = node_to_text(text, &tuples[idx]);
+                let suffix = if idx == tuples.len() - 1 { "" } else { "," };
+                row.push(s + suffix);
+                idx += 1;
+            }
+        }
+        rows.push(row);
+    }
+    rows
+}
+
 fn format(text: &str, output: &mut impl Write, cli: &Cli) {
     let language = tree_sitter_c::LANGUAGE.into();
     let mut parser = tree_sitter::Parser::new();
@@ -119,104 +182,199 @@ fn format(text: &str, output: &mut impl Write, cli: &Cli) {
         .set_language(&language)
         .expect("Error loading C parser");
 
+    // Two top-level patterns returned in document order by QueryCursor::matches():
+    //   Pattern 0: LAYOUT call expressions (structured match)
+    //   Pattern 1: "ledmap" identifier (simple match — tree-sitter-c mis-parses
+    //              PROGMEM as the declarator name, so "ledmap" ends up in an ERROR
+    //              node and can't be matched structurally)
     let query = tree_sitter::Query::new(
         &language,
-        r#"(call_expression (identifier) @id (#match? @id "^LAYOUT") (argument_list) @args) @call"#,
+        r#"
+            (call_expression
+                (identifier) @id (#match? @id "^LAYOUT")
+                (argument_list) @args) @call
+
+            ((identifier) @id (#eq? @id "ledmap"))
+        "#,
     )
     .unwrap();
     let id_idx = query.capture_index_for_name("id").unwrap();
     let args_idx = query.capture_index_for_name("args").unwrap();
     let call_idx = query.capture_index_for_name("call").unwrap();
 
-    // First, extract all the layouts before clang-format
+    // First pass: extract LAYOUT row structures before clang-format
     let tree = parser.parse(text, None).unwrap();
     let mut layouts = vec![];
+    let mut layout_structures: Vec<Vec<usize>> = vec![];
     let mut qc = tree_sitter::QueryCursor::new();
     let mut it = qc.matches(&query, tree.root_node(), text.as_bytes());
     while let Some(m) = it.next() {
+        if m.pattern_index != 0 {
+            continue;
+        }
         let args_node = m.nodes_for_capture_index(args_idx).next().unwrap();
-        let mut qc = args_node.walk();
-        let keys: Vec<_> = args_node.named_children(&mut qc).collect();
+        let mut wc = args_node.walk();
+        let keys: Vec<_> = args_node.named_children(&mut wc).collect();
         let rows = key_rows(text, &keys);
+        layout_structures.push(rows.iter().map(|row| row.len()).collect());
         layouts.push(rows);
     }
+
     layouts.reverse(); // so we can pop
 
     // Run clang-format on the document
     let text = &clang_format(cli, text);
 
-    // Parse again, post-clang-format
+    // Second pass: format both LAYOUTs and ledmaps in document order
     let tree = parser.parse(text, None).unwrap();
-
     let lines: Vec<_> = text.lines().collect();
     let mut qc = tree_sitter::QueryCursor::new();
     let mut it = qc.matches(&query, tree.root_node(), text.as_bytes());
     let mut last_byte = 0;
     while let Some(m) = it.next() {
-        let name = m.nodes_for_capture_index(id_idx).next().unwrap();
-        let (indent, _) = lines[name.start_position().row]
-            .split_once(|c: char| !c.is_whitespace())
-            .unwrap();
-        let indent = if indent.is_empty() { "    " } else { indent };
-        let name = node_to_text(text, &name);
-        log::trace!("Parsed call_expression: {name}");
-        log::trace!("Printing prefix to layout: {name}");
+        let name_node = m.nodes_for_capture_index(id_idx).next().unwrap();
 
-        // Print everything before the call expression
-        let args_node = m.nodes_for_capture_index(args_idx).next().unwrap();
-        let prefix = &text.as_bytes()[last_byte..args_node.start_byte()];
-        let prefix = str::from_utf8(prefix).expect("Text is not utf-8");
-        write!(output, "{prefix}").expect("Failed to write layout prefix");
+        if m.pattern_index == 0 {
+            // LAYOUT formatting
+            let call_node = m.nodes_for_capture_index(call_idx).next().unwrap();
+            let args_node = m.nodes_for_capture_index(args_idx).next().unwrap();
 
-        // Print the formatted key list inside parens
-        let mut rows = layouts.pop().unwrap();
-        let column_count = rows.iter().map(|r| r.len()).max().expect("No rows");
+            let (indent, _) = lines[name_node.start_position().row]
+                .split_once(|c: char| !c.is_whitespace())
+                .unwrap_or(("    ", ""));
+            let indent = if indent.is_empty() { "    " } else { indent };
 
-        log::trace!("Rows: {rows:?}");
+            let name = node_to_text(text, &name_node);
+            log::trace!("Parsed call_expression: {name}");
 
-        // Pad shorter rows on the left
-        for row in rows.iter_mut() {
-            let fill = column_count - row.len();
-            for _ in 0..fill / 2 {
-                row.insert(0, "".into())
-            }
-        }
+            let prefix = &text.as_bytes()[last_byte..args_node.start_byte()];
+            write!(output, "{}", str::from_utf8(prefix).unwrap()).unwrap();
 
-        log::trace!("Padded rows: {rows:?}");
+            let mut rows = layouts.pop().unwrap();
+            writeln!(output, "(").unwrap();
+            write_grid(output, &mut rows, indent, cli.split_spaces.unwrap_or(0));
+            write!(output, "{indent})").unwrap();
 
-        let column_sizes: Vec<_> = (0..column_count)
-            .map(|i| {
-                rows.iter()
-                    .map(|row| row.get(i).map(String::len).unwrap_or(0))
-                    .max()
-                    .unwrap_or(0)
-            })
-            .collect();
-
-        log::trace!("Column sizes: {column_sizes:?}");
-
-        writeln!(output, "(").unwrap();
-        for row in rows {
-            log::trace!("Writing row: {row:?}");
-            write!(output, "{indent}{indent}").unwrap();
-            for (i, col) in row.iter().enumerate() {
-                if i == column_count / 2 {
-                    write!(output, "{}", " ".repeat(cli.split_spaces.unwrap_or(0))).unwrap();
+            last_byte = call_node.end_byte();
+        } else {
+            // ledmap: walk up from the identifier to find init_declarator + initializer_list
+            let decl = {
+                let mut current = name_node.parent();
+                loop {
+                    match current {
+                        Some(node) if node.kind() == "init_declarator" => break Some(node),
+                        Some(node) => current = node.parent(),
+                        None => break None,
+                    }
                 }
-                let separator = if i + 1 < row.len() { " " } else { "" };
-                let width = if i + 1 < row.len() {
-                    column_sizes[i]
-                } else {
-                    0
-                };
-                write!(output, "{col:width$}{separator}").unwrap();
-            }
-            writeln!(output).unwrap();
-        }
-        write!(output, "{indent})").unwrap();
+            };
+            let decl = match decl {
+                Some(d) => d,
+                None => continue,
+            };
+            let mut cursor = decl.walk();
+            let init_list = match decl
+                .children(&mut cursor)
+                .find(|c| c.kind() == "initializer_list")
+            {
+                Some(il) => il,
+                None => continue,
+            };
 
-        let call_node = m.nodes_for_capture_index(call_idx).next().unwrap();
-        last_byte = call_node.end_byte();
+            // Skip if this "ledmap" is a reference inside an expression (e.g.
+            // `&ledmap[layer][i][0]`), not the actual declarator.  The identifier
+            // must appear before the initializer_list (i.e. on the left of `=`).
+            if name_node.start_byte() >= init_list.start_byte() {
+                continue;
+            }
+
+            log::debug!("Found ledmap, formatting it");
+
+            let (indent, _) = lines[name_node.start_position().row]
+                .split_once(|c: char| !c.is_whitespace())
+                .unwrap_or(("    ", ""));
+            let indent = if indent.is_empty() { "    " } else { indent };
+
+            let prefix = &text.as_bytes()[last_byte..init_list.start_byte()];
+            write!(output, "{}", str::from_utf8(prefix).unwrap()).unwrap();
+
+            writeln!(output, "{{").unwrap();
+
+            let mut layer_cursor = init_list.walk();
+            let layers: Vec<_> = init_list.named_children(&mut layer_cursor).collect();
+
+            for (layer_i, layer) in layers.iter().enumerate() {
+                let mut parts_cursor = layer.walk();
+                let mut layer_designator = None;
+                let mut layer_init = None;
+
+                for part in layer.children(&mut parts_cursor) {
+                    if part.kind() == "subscript_designator" {
+                        layer_designator = Some(node_to_text(text, &part));
+                    } else if part.kind() == "initializer_list" {
+                        layer_init = Some(part);
+                    }
+                }
+
+                let (designator, inner_init) = match (layer_designator, layer_init) {
+                    (Some(d), Some(i)) => (d, i),
+                    _ => continue,
+                };
+
+                let mut tuple_cursor = inner_init.walk();
+                let tuples: Vec<_> = inner_init.named_children(&mut tuple_cursor).collect();
+
+                let layer_num: Option<usize> = designator
+                    .trim_matches(|c| c == '[' || c == ']')
+                    .parse()
+                    .ok();
+
+                let row_structure = layer_num.and_then(|n| layout_structures.get(n));
+                let matches_layout = row_structure
+                    .map(|rs| rs.iter().sum::<usize>() == tuples.len())
+                    .unwrap_or(false);
+
+                let mut rows = if matches_layout {
+                    build_ledmap_rows(text, &tuples, row_structure.unwrap())
+                } else {
+                    if let Some(rs) = row_structure {
+                        log::warn!(
+                            "Ledmap layer {} has {} tuples but layout has {} keys, using fixed formatting",
+                            designator,
+                            tuples.len(),
+                            rs.iter().sum::<usize>()
+                        );
+                    }
+                    let cols = layout_structures
+                        .first()
+                        .and_then(|rs| rs.iter().max().copied())
+                        .unwrap_or(6);
+                    build_ledmap_rows(text, &tuples, &vec![cols; tuples.len().div_ceil(cols)])
+                };
+
+                write!(output, "{indent}{designator} = {{").unwrap();
+                writeln!(output).unwrap();
+                write_grid(output, &mut rows, indent, cli.split_spaces.unwrap_or(0));
+                write!(output, "{indent}}}").unwrap();
+                if layer_i < layers.len() - 1 {
+                    writeln!(output, ",").unwrap();
+                    writeln!(output).unwrap();
+                } else {
+                    writeln!(output).unwrap();
+                }
+            }
+
+            write!(output, "}};").unwrap();
+
+            // Advance past the init_declarator and its trailing semicolon
+            let after_decl = &text.as_bytes()[decl.end_byte()..];
+            let skip = after_decl
+                .iter()
+                .position(|&b| b == b';')
+                .map(|p| p + 1)
+                .unwrap_or(0);
+            last_byte = decl.end_byte() + skip;
+        }
     }
 
     log::debug!("Writing suffix");
@@ -227,6 +385,7 @@ fn format(text: &str, output: &mut impl Write, cli: &Cli) {
 
     log::info!("Formatting complete!");
 }
+
 
 fn node_to_text(text: &str, node: &tree_sitter::Node) -> String {
     node.utf8_text(text.as_bytes())
